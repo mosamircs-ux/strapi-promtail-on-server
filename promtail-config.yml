@@ -1,0 +1,56 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: https://t80ossw0ccs44ogwcokwg0oc.coolify.mhg-int.com/loki/api/v1/push
+    # إذا كان Loki يحتاج authentication، قم بإلغاء التعليق وتعديل:
+    # basic_auth:
+    #   username: your_username
+    #   password: your_password
+
+scrape_configs:
+  # قراءة لوجات Strapi من PM2
+  - job_name: strapi-pm2
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: strapi
+          environment: production
+          host: ${HOSTNAME}
+          # عدّل المسار حسب موقع لوجات PM2 لديك
+          __path__: /home/ubuntu/.pm2/logs/*.log
+    
+    pipeline_stages:
+      # استخراج timestamp من اللوجات
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z)'
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      
+      # استخراج مستوى اللوج (error, warn, info)
+      - regex:
+          expression: '\[(?P<level>\w+)\]'
+      - labels:
+          level:
+      
+      # استخراج اسم التطبيق من اسم الملف
+      - regex:
+          expression: '\/\.pm2\/logs\/(?P<app_name>[^-]+)'
+      - labels:
+          app_name:
+
+  # قراءة لوجات النظام (اختياري)
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          host: ${HOSTNAME}
+          __path__: /var/log/syslog
